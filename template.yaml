@@ -10,8 +10,27 @@ Globals:
   Function:
     Timeout: 3
     MemorySize: 128
-
+Conditions:
+  IsProduction: !Equals [!Ref "AWS::StackName", "sam-app-prod"]
 Resources:
+  CanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${HelloWorldFunction}:live"
+        - Name: FunctionName
+          Value: !Ref HelloWorldFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt HelloWorldFunction.Version.Version
   HelloWorldFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
@@ -20,7 +39,8 @@ Resources:
       Runtime: python3.9
       AutoPublishAlias: live
       DeploymentPreference:
-        Type: Canary10Percent5Minutes
+        Type: !If [IsProduction, "Canary10Percent5Minutes", "AllAtOnce"]
+        Alarms: !If [IsProduction, [!Ref CanaryErrorsAlarm], []]
       Architectures:
         - x86_64
       Events:
